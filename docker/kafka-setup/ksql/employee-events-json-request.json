@@ -1,0 +1,1 @@
+{"ksql":"CREATE STREAM IF NOT EXISTS EMPLOYEE_EVENTS_JSON (action VARCHAR, empId INTEGER, name VARCHAR, deptId INTEGER, salary DOUBLE, eventTimestamp VARCHAR) WITH (KAFKA_TOPIC=\u0027employee-events\u0027, VALUE_FORMAT=\u0027JSON_SR\u0027);","streamsProperties":{}}

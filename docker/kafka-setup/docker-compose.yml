@@ -1,0 +1,277 @@
+﻿services:
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,PLAINTEXT_HOST://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+    depends_on:
+      - kafka
+      - kafka-connect
+
+  kafka-connect:
+    build:
+      context: ./kafka-connect
+    container_name: kafka-connect
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: kafka-connect-group
+      CONNECT_CONFIG_STORAGE_TOPIC: kafka-connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: kafka-connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: kafka-connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_INTERNAL_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      CONNECT_LOG4J_ROOT_LOGLEVEL: INFO
+    volumes:
+      - C:/Users/Salma/OneDrive/Documents/SQL_PRACTICE/practice.db:/data/practice.db:ro
+    depends_on:
+      - kafka
+      - elasticsearch
+      - schema-registry
+
+  connect-init:
+    image: curlimages/curl:8.7.1
+    container_name: connect-init
+    volumes:
+      - ./connectors/employee-events-elasticsearch-sink.json:/config/employee-events-elasticsearch-sink.json:ro
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - >
+        until curl -s http://kafka-connect:8083/connectors >/dev/null; do sleep 5; done;
+        curl -sf http://kafka-connect:8083/connectors/employee-events-elasticsearch-sink >/dev/null ||
+        curl -s -X POST http://kafka-connect:8083/connectors -H 'Content-Type: application/json' --data-binary @/config/employee-events-elasticsearch-sink.json;
+        exit 0
+    depends_on:
+      - kafka-connect
+
+  ksqldb-server:
+    image: confluentinc/cp-ksqldb-server:7.6.1
+    container_name: ksqldb-server
+    ports:
+      - "8088:8088"
+    environment:
+      KSQL_BOOTSTRAP_SERVERS: kafka:9092
+      KSQL_LISTENERS: http://0.0.0.0:8088
+      KSQL_HOST_NAME: ksqldb-server
+      KSQL_KSQL_SERVICE_ID: kafka-lab_
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE: "true"
+      KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: "true"
+      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KSQL_CONNECT_URL: http://kafka-connect:8083
+    depends_on:
+      - kafka
+      - kafka-connect
+      - schema-registry
+
+  ksql-init:
+    image: curlimages/curl:8.7.1
+    container_name: ksql-init
+    volumes:
+      - ./ksql/employee-events-json-request.json:/config/employee-events-json-request.json:ro
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - >
+        until curl -s http://ksqldb-server:8088/info >/dev/null; do sleep 5; done;
+        curl -s -X POST http://ksqldb-server:8088/ksql -H 'Content-Type: application/vnd.ksql.v1+json; charset=utf-8' --data-binary @/config/employee-events-json-request.json;
+        exit 0
+    depends_on:
+      - ksqldb-server
+
+  ksqldb-cli:
+    image: confluentinc/cp-ksqldb-cli:7.6.1
+    container_name: ksqldb-cli
+    tty: true
+    stdin_open: true
+    entrypoint: /bin/sh
+    depends_on:
+      - ksqldb-server
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    container_name: schema-registry
+    ports:
+      - "8085:8081"
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    depends_on:
+      - kafka
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.22
+    container_name: elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.22
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+
+  elastic-init:
+    image: curlimages/curl:8.7.1
+    container_name: elastic-init
+    volumes:
+      - ./elasticsearch/employee-events-template.json:/config/employee-events-template.json:ro
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - >
+        until curl -s http://elasticsearch:9200 >/dev/null; do sleep 5; done;
+        curl -s -X PUT http://elasticsearch:9200/_index_template/employee-events-template -H 'Content-Type: application/json' --data-binary @/config/employee-events-template.json;
+        exit 0
+    depends_on:
+      - elasticsearch
+
+  kibana-init:
+    image: curlimages/curl:8.7.1
+    container_name: kibana-init
+    volumes:
+      - ./kibana/employee-events-data-view.json:/config/employee-events-data-view.json:ro
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - >
+        until curl -s http://kibana:5601/api/status >/dev/null; do sleep 5; done;
+        curl -s -X POST http://kibana:5601/api/saved_objects/index-pattern/employee-events-pattern -H 'kbn-xsrf: true' -H 'Content-Type: application/json' --data-binary @/config/employee-events-data-view.json;
+        exit 0
+    depends_on:
+      - kibana
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: kafka-exporter
+    restart: unless-stopped
+    ports:
+      - "9308:9308"
+    command:
+      - --kafka.server=kafka:9092
+    depends_on:
+      - kafka
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - kafka-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  zipkin:
+    image: openzipkin/zipkin:3.4.1
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+  sonarqube-db:
+    image: postgres:16-alpine
+    container_name: sonarqube-db
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonarqube
+    volumes:
+      - sonarqube-db-data:/var/lib/postgresql/data
+
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+    volumes:
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-extensions:/opt/sonarqube/extensions
+      - sonarqube-logs:/opt/sonarqube/logs
+    depends_on:
+      - sonarqube-db
+
+volumes:
+  sonarqube-db-data:
+  sonarqube-data:
+  sonarqube-extensions:
+  sonarqube-logs:
+
+

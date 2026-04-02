@@ -1,0 +1,28 @@
+# Maven / Java
+target/
+*.class
+*.jar
+*.war
+*.log
+
+# IDE / editor
+.idea/
+.vscode/
+*.iml
+
+# OS / local
+.DS_Store
+Thumbs.db
+
+# Local databases / generated files
+*.db
+*.sqlite
+*.sqlite3
+
+# Local env and build caches
+.m2/
+.m2repo/
+
+# Temporary folders
+repo-export/
+monitoring-tmp/

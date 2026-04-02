@@ -1,0 +1,16 @@
+{
+  "name": "employee-sqlite-source",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "connection.url": "jdbc:sqlite:/data/practice.db",
+    "mode": "incrementing",
+    "incrementing.column.name": "EmpID",
+    "table.whitelist": "Employee",
+    "topic.prefix": "sqlite-",
+    "poll.interval.ms": "5000",
+    "tasks.max": "1",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
+  }
+}

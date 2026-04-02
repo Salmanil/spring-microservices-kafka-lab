@@ -1,0 +1,28 @@
+{
+  "name": "employee-events-elasticsearch-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+    "topics": "employee-events",
+    "connection.url": "http://elasticsearch:9200",
+    "tasks.max": "1",
+    "key.ignore": "false",
+    "schema.ignore": "true",
+    "type.name": "_doc",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "io.confluent.connect.json.JsonSchemaConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "employee-events-dlq",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
+    "behavior.on.null.values": "delete",
+    "transforms": "addMetadata",
+    "transforms.addMetadata.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+    "transforms.addMetadata.topic.field": "kafka_topic",
+    "transforms.addMetadata.partition.field": "kafka_partition",
+    "transforms.addMetadata.offset.field": "kafka_offset",
+    "transforms.addMetadata.timestamp.field": "kafka_timestamp"
+  }
+}
